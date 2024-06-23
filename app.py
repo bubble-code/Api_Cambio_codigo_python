@@ -1,9 +1,10 @@
 from flask import Flask, request, jsonify
 from sqlalchemy import create_engine, text
+from flask_cors import CORS
 import json
 
 app = Flask(__name__)
-
+CORS(app)
 
 class Articulo:
     def __init__(self):
@@ -230,6 +231,25 @@ class Articulo:
                 self.close_conn()
 
 
+
+@app.route('/autocomplete', methods=['GET'])
+def autocomplete():
+    search = request.args.get('search','')
+    
+    if search:
+        try:
+            articulo = Articulo()
+            conn = articulo.Open_Conn_Solmicro()
+            query = text(f"SELECT TOP 10 IDArticulo,DescArticulo FROM tbMaestroArticulo WHERE IDArticulo LIKE :search")
+            result = conn.execute(query, {'search':f'%{search}%'}).fetchall()
+            print(result)
+            articles = [{'IDArticulo':row[0], 'DescArticulo': row[1]} for row in result]
+            conn.close()
+            return jsonify(articles)
+        except Exception as e:
+            print("Error en la consulta de autocompletado: ", e)
+            return jsonify([]), 500
+    return jsonify([])
 
 @app.route('/recoding_articulo', methods=['POST'])
 def update_articulo():

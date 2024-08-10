@@ -2,9 +2,10 @@ from flask import Flask, request, jsonify
 from sqlalchemy import create_engine, text
 from flask_cors import CORS
 import json
+from typing import List, Dict, Any
 
-app = Flask(__name__)
-CORS(app)
+# app = Flask(__name__)
+# CORS(app)
 
 class Articulo:
     def __init__(self):
@@ -230,47 +231,187 @@ class Articulo:
             if conn:
                 self.close_conn()
 
+    def autocomplete(self, search):
+        conn = self.Open_Conn_Solmicro()
+        query = text("SELECT TOP 10 IDArticulo, DescArticulo FROM tbMaestroArticulo WHERE IDArticulo LIKE :search")
+        result = conn.execute(query, {'search': f'%{search}%'}).fetchall()
+        articles = [{'IDArticulo': row[0], 'DescArticulo': row[1]} for row in result]
+        conn.close()
+        return articles
+
+    def autocomplete2(self, search):
+        script = text("SELECT TOP 10 [of].IDArticulo, [of].QFabricar,[of].NOrden, [of].Estado FROM tbOrdenFabricacion [of] WHERE [of].NOrden LIKE :search")
+        conn = self.connection_string_solmicro.connect()
+        result = conn.execute(script,{'search':f'%{search}%'}).fetchall()
+        conn.close()
+        return [{'IDArticulo':row[0],'QFabricar':row[1],'NOrden':row[2]} for row in result]
+    
+    from typing import List, Dict, Any
+
+    def result_to_dicts(selft,column_names: List[str], query_result: List[tuple]) -> List[Dict[str, Any]]:   
+        return [dict(zip(column_names, row)) for row in query_result]
 
 
-@app.route('/autocomplete', methods=['GET'])
-def autocomplete():
-    search = request.args.get('search','')
+    def getArticulos(self,listaIDs):
+        conn = self.connection_string_solmicro.connect()
+        result = []
+        for row in listaIDs:
+            script = text(f"SELECT ma.IDArticulo FROM tbMaestroArticulo ma WHERE ma.IDArticulo=N'{row}'")
+            print(script)
+            response = conn.execute(script).fetchall()
+            for r in response:
+                result.append(r)
+        conn.close()
+        return [{'IDArticulo':row[0]} for row in result]
     
-    if search:
-        try:
-            articulo = Articulo()
-            conn = articulo.Open_Conn_Solmicro()
-            query = text(f"SELECT TOP 10 IDArticulo,DescArticulo FROM tbMaestroArticulo WHERE IDArticulo LIKE :search")
-            result = conn.execute(query, {'search':f'%{search}%'}).fetchall()
-            print(result)
-            articles = [{'IDArticulo':row[0], 'DescArticulo': row[1]} for row in result]
-            conn.close()
-            return jsonify(articles)
-        except Exception as e:
-            print("Error en la consulta de autocompletado: ", e)
-            return jsonify([]), 500
-    return jsonify([])
+    def restaurar_sp(self, conn):
+        restaurar_sp_query = text(""" ALTER PROCEDURE [dbo].[xAutoNumericValue]
+        AS
+        BEGIN
+            DECLARE @Valor INT
 
-@app.route('/recoding_articulo', methods=['POST'])
-def update_articulo():
-    data = request.json
-    old_id_articulo = data.get('old_id_articulo')
-    new_id_articulo = data.get('new_id_articulo')
-    print(old_id_articulo)
-    print(new_id_articulo)
-    
-    if not old_id_articulo or not new_id_articulo:
-        return jsonify({"error": "old_id_articulo and new_id_articulo are required"}), 400
-    
-    articulo = Articulo()
-    
-    try:
-        articulo.disable_all_foreign_keys()
-        articulo.update_id_articulo(old_id_articulo, new_id_articulo)
-        articulo.enable_all_foreign_keys()
-        return jsonify({"status": "success"}), 200
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+            INSERT INTO xAutoNumeric (Valor)
+            VALUES (0)
 
-if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+            SET @Valor = @@IDENTITY
+
+            --INSERT INTO ale_autoNumber (autonumber)
+            --VALUES (@Valor)
+            
+            DELETE FROM xAutoNumeric
+            WHERE ID = @Valor
+            SELECT @Valor AS value
+        END """)
+
+        borrar_datos_query = text("DELETE FROM   ale_autoNumber")
+        conn.execute(restaurar_sp_query)
+        conn.execute(borrar_datos_query)
+        conn.commit()
+
+    def modificar_sp(self, conn):
+        modificar_sp_query = text(""" ALTER PROCEDURE [dbo].[xAutoNumericValue]
+        AS
+        BEGIN
+            DECLARE @Valor INT
+
+            INSERT INTO xAutoNumeric (Valor)
+            VALUES (0)
+
+            SET @Valor = @@IDENTITY
+
+            INSERT INTO ale_autoNumber (autonumber)
+            VALUES (@Valor)
+            
+            DELETE FROM xAutoNumeric
+            WHERE ID = @Valor
+            SELECT @Valor AS value
+        END """)
+        conn.execute(modificar_sp_query)
+        conn.commit()
+    
+    def generate_of(self,listaArticulo):
+        conn = self.connection_string_solmicro.connect()
+        # Modificar SP para que inserte en la tabla ale_autoNumber
+        self.modificar_sp(conn)
+
+
+        for lanzamiento,rows in listaArticulo.items():   
+            # Get Contador
+            queryTbContador = text(f"SELECT mc.Texto, mc.Contador FROM tbMaestroContador mc WHERE mc.IDContador= N'OFF'")
+            resultContador = conn.execute(queryTbContador)
+            columnContador = ["Texto", "Contador"]
+            tbContador = self.result_to_dicts(columnContador,resultContador) 
+            contadorOF = int(tbContador[0]["Contador"])
+            Texto  = tbContador[0]["Texto"]
+            contadorOF = contadorOF + 1
+            NOrden = Texto + str(contadorOF) 
+
+            # Get Articulo y Cantidad a fabricar
+            IDArticulo = rows[0][1]
+            QFabrica = rows[0][4]    
+            QBuenas = rows[0][5]    
+
+            # Get Revision
+            queryRevision = text(f"SELECT ma.NivelModificacionPlan FROM tbMaestroArticulo ma WHERE ma.IDArticulo = N'{IDArticulo}'")
+            resultRevision = conn.execute(queryRevision)
+            columnRevision = ["Revision"]
+            tbRevision = self.result_to_dicts(columnRevision,resultRevision)
+
+            # Get Autonumeric
+            tbAutoNuOrden = self.getValueAutonumerico(conn)
+
+            queryRuta = text(f"SELECT FROM tbRuta WHERE ([IDArticulo]=N'{IDArticulo}' AND [IDRuta]=N'01') ORDER BY Secuencia")
+            
+            #Generacion de la cabecera de la orden de fabricacion
+            queryInsertOF = text(f"""INSERT INTO tbOrdenFabricacion ([IDOrden], [NOrden], [IDContador], [IDArticulo], [FechaCreacion], [IDCentroGestion], [QFabricar], [Estado], [FechaInicio], [FechaFin], [IDAlmacen], [IDEstructura], [IDRuta], [FechaInicioProg], [FechaFinProg], [ParamMaterial], [ParamTerminado], [NivelPlano], [Reproceso], [FechaCreacionAudi], [FechaModificacionAudi], [UsuarioAudi], [UsuarioCreacionAudi]) VALUES ({tbAutoNuOrden},N'{NOrden}', N'OFF', N'{IDArticulo}', '20240810 00:00:00.000', N'1', {QFabrica}, 2, '20240810 00:00:00.000', '20240901 00:00:00.000', N'0', N'01', N'01', '20240810 07:00:00.000', '20240901 08:51:19.000', 3, 1, N'{tbRevision[0]["Revision"]}', 0, '20240810 14:03:13.292', '20240810 14:03:13.292', N'favram\\a.obregon', N'favram\\a.obregon')""")
+            queryUpdateContador = text(f"UPDATE tbMaestroContador SET Contador={contadorOF}, FechaModificacionAudi='20240810 14:03:13.112', UsuarioAudi=N'favram\\a.obregon' WHERE IDContador=N'OFF'")
+            conn.execute(queryUpdateContador)
+            conn.execute(queryInsertOF)
+
+            # Get Estructura
+            listSecuencias = [row[2] for row in rows]
+            secuencias_str = ', '.join(map(str, listSecuencias))
+
+            queryEstructura = text(f"SELECT e.IDComponente,e.Cantidad, e.Merma, e.Secuencia,e.IDEstrComp, e.IDUdMedidaProduccion,e.Factor, e.CantidadProduccion FROM tbEstructura e WHERE e.IDArticulo = N'{IDArticulo}' AND e.IDEstructura = N'01' and e.Secuencia IN ({secuencias_str})") 
+            resutEstructura =  conn.execute(queryEstructura).fetchall()
+            columnEstructura = ["IDComponente","Cantidad","Merma", "Secuencia","IDEstrComp","IDUdMedidaProduccion","Factor","CantidadProduccion"]
+            tbEstructura =  self.result_to_dicts(columnEstructura,resutEstructura)
+            for item in tbEstructura:
+                #  Get Autonumeric
+                autoNumIDEstructura = self.getValueAutonumerico(conn)
+                queryInserTbOrdenEstructura = text(f"""INSERT INTO tbOrdenEstructura ([IDOrdenEstructura], [IDOrden], [IDComponente], [NOrden], [Cantidad], [Merma], [Secuencia], [QNecesaria], [QConsumida], [IDAlmacen], [IDEstrComp], [IDUdMedidaProduccion], [Factor], [CantidadProduccion], [RamaExplosionOF], [FechaCreacionAudi], [FechaModificacionAudi], [UsuarioAudi], [UsuarioCreacionAudi])
+VALUES ({autoNumIDEstructura}, {tbAutoNuOrden}, N'{item["IDComponente"]}', N'{NOrden}', {item["Cantidad"]}, {item["Merma"]}, {item["Secuencia"]}, {item["Cantidad"] * QFabrica}, {QBuenas * item["Cantidad"]}, N'0', {item["IDEstrComp"]}, N'{item["IDUdMedidaProduccion"]}', {item["Factor"]}, {item["CantidadProduccion"]}, N'{tbAutoNuOrden}\\{autoNumIDEstructura}', '20240810 14:03:13.294', '20240810 14:03:13.294', N'favram\\a.obregon', N'favram\\a.obregon')""")
+                conn.execute(queryInserTbOrdenEstructura)
+
+            # Ruta
+            queryRuta = text(f"SELECT e.IDComponente,e.Cantidad, e.Merma, e.Secuencia,e.IDEstrComp, e.IDUdMedidaProduccion,e.Factor, e.CantidadProduccion FROM tbEstructura e WHERE e.IDArticulo = N'{IDArticulo}' AND e.IDEstructura = N'01' and e.Secuencia IN ({secuencias_str})") 
+            resultRuta = conn.execute(queryRuta).fetchall()
+            columnRuta = ["IDRutaOp","IDOperacion","DescOperacion","IDCentro","FactorHombre","TiempoPrep","UdTiempoPrep"]
+            tbRuta = self.result_to_dicts(columnRuta,resultRuta)
+            for item in tbRuta:
+                autoNumIDRuta = self.getValueAutonumerico(conn)
+                queryInsertTbOrdenRuta = text(f"""INSERT INTO tbOrdenRuta ([IDOrdenRuta], [IDRutaOp], [IDOrden], [NOrden], [TipoOperacion], [IDOperacion], [DescOperacion], [Critica], [IDCentro], [FactorHombre], [TiempoPrep], [UdTiempoPrep], [TiempoEjecUnit], [UdTiempoEjec], [CantidadTiempo], [UdTiempo], [IDUdProduccion], [QBuena], [QRechazada], [FactorProduccion], [ControlProduccion], [FechaInicio], [FechaFin], [QFabricar], [TiempoCiclo], [UdTiempoCiclo], [LoteCiclo], [PlazoSub], [UdTiempoPlazo], [SolapePor], [Ciclo], [QDudosa], [Rendimiento], [CantidadTiempo100], [SolapeLote], [Secuencia], [FechaCreacionAudi], [FechaModificacionAudi], [UsuarioAudi], [UsuarioCreacionAudi])
+VALUES ({autoNumIDRuta}, {item["IDRutaOp"]}, {tbAutoNuOrden}, N'{NOrden}', 0, N'{item["IDOperacion"]}', N'{item["DescOperacion"]}', 0, N'{item["IDCentro"]}', {item["FactorHombre"]}, {item["TiempoPrep"]}, {item["UdTiempoPrep"]}, 0.00010001, 1, 9999, 1, N'u.', 0, 0, 1, 1, '20240625 07:00:00.000', '20240625 07:00:05.000', 14, 0, 1, 0, 0, 1, 0, 0, 0, 100, 0, 0, 2, '20240807 14:03:13.309', '20240807 14:03:13.309', N'favram\a.obregon', N'favram\a.obregon')""")
+
+
+            conn.commit()
+
+        # Restaurar el SP a su estado inicial
+        self.restaurar_sp(conn)
+
+
+        conn.close()
+
+    def getValueAutonumerico(self, conn):
+        queryAutonumeric = text("EXEC dbo.xAutoNumericValue")
+        conn.execute(queryAutonumeric)
+        queryGetValueAutonumeric = text("SELECT MAX(an.autonumber) AS Valor FROM ale_autoNumber an")
+        resultValueAutonumeric = conn.execute(queryGetValueAutonumeric)
+        columnAutoNumeric = ["Value"]
+        tbAutoNumeric = self.result_to_dicts(columnAutoNumeric,resultValueAutonumeric)
+        return tbAutoNumeric[0]["Value"]
+        
+
+# @app.route('/recoding_articulo', methods=['POST'])
+# def update_articulo():
+#     data = request.json
+#     old_id_articulo = data.get('old_id_articulo')
+#     new_id_articulo = data.get('new_id_articulo')
+#     print(old_id_articulo)
+#     print(new_id_articulo)
+    
+#     if not old_id_articulo or not new_id_articulo:
+#         return jsonify({"error": "old_id_articulo and new_id_articulo are required"}), 400
+    
+#     articulo = Articulo()
+    
+#     try:
+#         articulo.disable_all_foreign_keys()
+#         articulo.update_id_articulo(old_id_articulo, new_id_articulo)
+#         articulo.enable_all_foreign_keys()
+#         return jsonify({"status": "success"}), 200
+#     except Exception as e:
+#         return jsonify({"error": str(e)}), 500
+
+# if __name__ == '__main__':
+#     app.run(debug=True, host='0.0.0.0', port=5000)

@@ -66,11 +66,16 @@ def obtener_articulos():
 
 @main_bp.route('/generarOF', methods=['POST'])
 def generarOF():
-    data = request.json
-    listaIDs = data.get('listaID')
-    articulo = Articulo()
-    articulo.generate_of(listaIDs)
-    return jsonify({"status": "success"}), 200
+    try:
+        data = request.json
+        lista_ids = data.get('listaID')
+        articulo_service = Articulo()
+        articulo_service.generate_of(lista_ids)
+        return jsonify({"status": "success"}), 200
+    except KeyError as e:
+        return jsonify({"status": "error", "message": str(e)}), 400
+    except Exception as e:
+        return jsonify({"status": "error", "message": "Internal Server Error"}), 500
     # print(new_id_articulo)
 
     # if not old_id_articulo or not new_id_articulo:

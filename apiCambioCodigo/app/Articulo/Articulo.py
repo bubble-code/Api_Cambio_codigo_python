@@ -3,6 +3,8 @@ from sqlalchemy import create_engine, text
 from flask_cors import CORS
 import json
 from typing import List, Dict, Any
+from collections import defaultdict
+from datetime import datetime
 
 # app = Flask(__name__)
 # CORS(app)
@@ -257,7 +259,7 @@ class Articulo:
         conn = self.connection_string_solmicro.connect()
         result = []
         for row in listaIDs:
-            script = text(f"SELECT ma.IDArticulo FROM tbMaestroArticulo ma WHERE ma.IDArticulo=N'{row}'")
+            script = text(f"SELECT ma.IDArticulo FROM tbMaestroArticulo ma WHERE ma.IDArticulo=N'{str(row)}'")
             print(script)
             response = conn.execute(script).fetchall()
             for r in response:
@@ -362,23 +364,36 @@ class Articulo:
         self.connection.execute(query)
         self.connection.commit()
 
+    def _check_ruta(self,id_articulo,row):
+        query = text(f"SELECT count(*) as count FROM tbRuta r WHERE r.IDArticulo = N'{id_articulo}' AND r.IDRuta = N'01' and r.Secuencia = {row[2]}")                
+        result = self.connection.execute(query).fetchone()
+        return result[0] > 0
+
     def _procesar_ruta(self, id_articulo, n_orden, rows):
         for row in rows:
-            query = text(f"SELECT r.IDRutaOp, r.IDOperacion,r.DescOperacion, r.IDCentro,r.FactorHombre, r.TiempoPrep,r.UdTiempoPrep, r.TiempoEjecUnit,r.UdTiempoEjec, r.CantidadTiempo, r.UdTiempo,r.IDUdProduccion, r.FactorProduccion,r.ControlProduccion,r.TiempoCiclo,r.UdTiempoCiclo,r.LoteCiclo,r.PlazoSub,r.UdTiempoPlazo,r.SolapePor, r.Ciclo, r.Rendimiento, r.CantidadTiempo100, r.SolapeLote, r.Secuencia FROM tbRuta r WHERE r.IDArticulo = N'{id_articulo}' AND r.IDRuta = N'01' and r.Secuencia = {row[2]}")                
+            query = text(f"SELECT r.IDRutaOp, r.IDOperacion,r.DescOperacion, r.IDCentro,r.FactorHombre, r.TiempoPrep,r.UdTiempoPrep, r.TiempoEjecUnit,r.UdTiempoEjec, r.CantidadTiempo, r.UdTiempo,r.IDUdProduccion, r.FactorProduccion,r.ControlProduccion,r.TiempoCiclo,r.UdTiempoCiclo,r.LoteCiclo,r.PlazoSub,r.UdTiempoPlazo,r.SolapePor, r.Ciclo, r.Rendimiento, r.CantidadTiempo100, r.SolapeLote, r.Secuencia, r.TipoOperacion FROM tbRuta r WHERE r.IDArticulo = N'{id_articulo}' AND r.IDRuta = N'01' and r.Secuencia = {row[2]}")                
             result = self.connection.execute(query).fetchall()
             if result:
-                columnRuta = ["IDRutaOp","IDOperacion","DescOperacion","IDCentro","FactorHombre","TiempoPrep","UdTiempoPrep","TiempoEjecUnit","UdTiempoEjec","CantidadTiempo","UdTiempo","IDUdProduccion","FactorProduccion", "ControlProduccion","TiempoCiclo","UdTiempoCiclo","LoteCiclo","PlazoSub","UdTiempoPlazo","SolapePor","Ciclo", "Rendimiento","CantidadTiempo100","SolapeLote","Secuencia"]
+                columnRuta = ["IDRutaOp","IDOperacion","DescOperacion","IDCentro","FactorHombre","TiempoPrep","UdTiempoPrep","TiempoEjecUnit","UdTiempoEjec","CantidadTiempo","UdTiempo","IDUdProduccion","FactorProduccion", "ControlProduccion","TiempoCiclo","UdTiempoCiclo","LoteCiclo","PlazoSub","UdTiempoPlazo","SolapePor","Ciclo", "Rendimiento","CantidadTiempo100","SolapeLote","Secuencia","TipoOperacion"]
                 tbRuta = self.result_to_dicts(columnRuta,result)
                 item = tbRuta[0]
                 auto_num_id_ruta = self._get_value_autonumerico()
                 queryInsertTbOrdenRuta = text(f"""INSERT INTO tbOrdenRuta ([IDOrdenRuta], [IDRutaOp], [IDOrden], [NOrden], [TipoOperacion], [IDOperacion], [DescOperacion], [Critica], [IDCentro], [FactorHombre], [TiempoPrep], [UdTiempoPrep], [TiempoEjecUnit], [UdTiempoEjec], [CantidadTiempo], [UdTiempo], [IDUdProduccion], [QBuena], [QRechazada], [FactorProduccion], [ControlProduccion], [FechaInicio], [FechaFin], [QFabricar], [TiempoCiclo], [UdTiempoCiclo], [LoteCiclo], [PlazoSub], [UdTiempoPlazo], [SolapePor], [Ciclo], [QDudosa], [Rendimiento], [CantidadTiempo100], [SolapeLote], [Secuencia], [FechaCreacionAudi], [FechaModificacionAudi], [UsuarioAudi], [UsuarioCreacionAudi])
-VALUES ({auto_num_id_ruta}, {item["IDRutaOp"]}, {self.tb_auto_nu_orden}, N'{n_orden}', 0, N'{item["IDOperacion"]}', N'{item["DescOperacion"]}', 0, N'{item["IDCentro"]}', {item["FactorHombre"]}, {item["TiempoPrep"]}, {item["UdTiempoPrep"]}, {item["TiempoEjecUnit"]}, {item["UdTiempoEjec"]}, {item["CantidadTiempo"]}, {item["UdTiempo"]}, N'{item["IDUdProduccion"]}', {row[5]}, 0, {item["FactorProduccion"]}, {item["ControlProduccion"]}, '20240810 07:00:00.000', '20240810 07:00:05.000', {row[4]}, {item["TiempoCiclo"]}, {item["UdTiempoCiclo"]}, {item["LoteCiclo"]}, {item["PlazoSub"]}, {item["UdTiempoPlazo"]}, {item["SolapePor"]}, 0, 0, {item["Rendimiento"]}, {item["CantidadTiempo100"]}, {item["SolapeLote"]}, {item["Secuencia"]}, '20240810 14:03:13.309', '20240810 14:03:13.309', N'favram\\a.obregon', N'favram\\a.obregon')""")
+VALUES ({auto_num_id_ruta}, {item["IDRutaOp"]}, {self.tb_auto_nu_orden}, N'{n_orden}', {item["TipoOperacion"]}, N'{item["IDOperacion"]}', N'{item["DescOperacion"]}', 0, N'{item["IDCentro"]}', {item["FactorHombre"]}, {item["TiempoPrep"]}, {item["UdTiempoPrep"]}, {item["TiempoEjecUnit"]}, {item["UdTiempoEjec"]}, {item["CantidadTiempo"]}, {item["UdTiempo"]}, N'{item["IDUdProduccion"]}', {row[5]}, 0, {item["FactorProduccion"]}, {item["ControlProduccion"]}, '20240810 07:00:00.000', '20240810 07:00:05.000', {row[4]}, {item["TiempoCiclo"]}, {item["UdTiempoCiclo"]}, {item["LoteCiclo"]}, {item["PlazoSub"]}, {item["UdTiempoPlazo"]}, {item["SolapePor"]}, 0, 0, {item["Rendimiento"]}, {item["CantidadTiempo100"]}, {item["SolapeLote"]}, {item["Secuencia"]}, '20240810 14:03:13.309', '20240810 14:03:13.309', N'favram\\a.obregon', N'favram\\a.obregon')""")
                 self.connection.execute(queryInsertTbOrdenRuta)
                 self.connection.commit()
 
     def _process_lanzamiento(self, rows):
-        contador_of, n_orden = self._obtener_contador()
         id_articulo, q_fabrica, q_buenas = self._obtener_datos_articulo(rows)
+        if not self._articulo_existe(id_articulo):
+            # return {"status": "error", "message": "S/O"}
+            return  "S/A"
+        for row in rows:
+            result = self._check_ruta(id_articulo,row)
+            if not result:
+                return "S/F"
+
+        contador_of, n_orden = self._obtener_contador()
         revision = self._obtener_revision(id_articulo)
 
         self._insertar_cabecera_of(n_orden, id_articulo, q_fabrica, revision)
@@ -390,41 +405,220 @@ VALUES ({auto_num_id_ruta}, {item["IDRutaOp"]}, {self.tb_auto_nu_orden}, N'{n_or
 
         self._procesar_ruta(id_articulo, n_orden, rows)
 
+        return n_orden
+
+    def _articulo_existe(self, id_articulo):
+        query_check_articulo = text(f"SELECT COUNT(*) as count FROM tbMaestroArticulo WHERE IDArticulo = N'{id_articulo}'")
+        result = self.connection.execute(query_check_articulo).fetchone()
+        return result[0] > 0
+
     def generate_of(self,listaArticulo):
         try:
             self.connection = self.connection_string_solmicro.connect()
             self._modificar_sp()
             for lanzamiento, rows in listaArticulo.items():
-                self._process_lanzamiento(rows)
+                resultado = self._process_lanzamiento(rows)
+                # if not resultado.get('status')== 'error':
+                #     return resultado.get("message")
+                # # Si ocurre un error, puedes hacer rollback aquí si es necesario
+                #     self.connection.rollback()
+                #     return {
+                #     "status": "error",
+                #     "message": f"Error processing batch {lanzamiento}: {resultado.get('message')}"
+                #     }
             self._restaurar_sp()
+            return {"status": "success", "message": f"{resultado}"}
         except Exception as e:
-            print("Error al activar las restricciones de clave externa: ", e)
+            print(f"Error en generate_of: {e}")
+            self.connection.rollback()
+            return {"status": "error", "message": "Internal Server Error"}
         finally:
+            self.connection.commit()
             self.connection.close()            
 
     
+    def getOrdenes(self,startDate=None, endDate=None):
+        try:
+            print(startDate, endDate)
+            self.connection = self.connection_string_solmicro.connect()
+            condiciones = []
+            if startDate:
+                # startDate = datetime.strftime(startDate, '%Y-%m-%d')
+                condiciones.append(f"[Fecha Req Cliente] >= CONVERT(DATETIME,'{startDate}',102)")
+            if endDate:
+                # endDate = datetime.strftime(endDate, '%Y-%m-%d')
+                condiciones.append(f"[Fecha Req Cliente] <= CONVERT(DATETIME,'{endDate}',102)")
+            if startDate and endDate:
+                query = f"SELECT IDArticulo, NOrden, NPedido, QPendiente, Fabricar, DescArticulo, TiempoEjecUnit, Tiempo, StockFisico, DescCentro, DescOperacion, Secuencia, Cliente, QPedida, [Fecha Req Cliente], IDSeccion, TIPO15085 FROM vCTLCISituacionFabricaCentro WHERE [Fecha Req Cliente] BETWEEN CONVERT(DATETIME,'{startDate}',102) AND CONVERT(DATETIME,'{endDate}',102)"
+            else:
+                query = "SELECT IDArticulo, NOrden, NPedido, QPendiente, Fabricar, DescArticulo, TiempoEjecUnit, Tiempo, StockFisico, DescCentro, DescOperacion, Secuencia, Cliente, QPedida, [Fecha Req Cliente], IDSeccion, TIPO15085 FROM vCTLCISituacionFabricaCentro"
+                if condiciones:
+                    query += " WHERE " + " AND ".join(condiciones)        
+            resultado = self.connection.execute(text(query)).fetchall()
+            
+            # Agrupar los resultados por NOrden
+            ordenes_agrupadas = []
+            for row in resultado:
+                row_dict = {
+                    "IDArticulo": row[0],
+                    "NOrden": row[1],
+                    "NPedido": row[2],
+                    "QPendiente": row[3],
+                    "Fabricar": row[4],
+                    "DescArticulo": row[5],
+                    "TiempoEjecUnit": row[6],
+                    "Tiempo": row[7],
+                    "StockFisico": row[8],
+                    "DescCentro": row[9],
+                    "DescOperacion": row[10],
+                    "Secuencia": row[11],
+                    "Cliente": row[12],
+                    "QPedida": row[13],
+                    "Fecha Req Cliente": row[14],
+                    "IDSeccion": row[15],
+                    "TIPO15085": row[16]
+                }
+                ordenes_agrupadas.append(row_dict)
+            # print(ordenes_agrupadas)
+            return ordenes_agrupadas
+        
+        except Exception as e:
+            print(f"Error en getOrdenes: {e}")
+            return {"status": "error", "message": "Internal Server Error"}
+        
+        finally:
+            # Cerrar la conexión
+            if self.connection:
+                self.connection.close() 
+    
+    def getSeccion(self):
+        try:
+            self.connection = self.connection_string_solmicro.connect()
+            query = text("SELECT ms.IDSeccion, CASE WHEN ms.IDSeccion = 125 OR ms.IDSeccion = 126 THEN 'CALIDAD' WHEN ms.IDSeccion = 400 OR ms.IDSeccion = 450 OR ms.IDSeccion = 455 OR ms.IDSeccion = 500 THEN 'ALMACEN' else ms.DescSeccion END AS DescSeccion  FROM tbMaestroSeccion ms")
+            resultado = self.connection.execute(query).fetchall()
+            resultado_list = []
+            for row in resultado:
+                row_dict = {
+                    "IDSeccion": row[0],
+                    "DescSeccion": row[1]
+                }
+                resultado_list.append(row_dict)
+            return resultado_list
+        except Exception as e:
+            print(f"Error en getOrdenes: {e}")
+            return {"status": "error", "message": "Internal Server Error"}        
+        finally:
+            # Cerrar la conexión
+            if self.connection:
+                self.connection.close() 
+
+    def procesarCapacidadTeorica(self,startDate,endDate):
+        try:
+            ordenes = self.getOrdenes(startDate,endDate)
+            if ordenes:
+                secciones = self.getSeccion()
+                seccion_dict = { seccion["IDSeccion"]:seccion["DescSeccion"] for seccion in secciones}
+                resumen_secciones = defaultdict(lambda: {
+                "seleccion": "",
+                "centro": "",
+                "capacidad_teorica_diaria": 0,
+                "seccion": "",
+                "carga_trabajo": 0,
+                "porcentaje_carga_trabajo": 0,
+                "dias": 0,
+                "cant_trabajo": 0
+                })
+                capacidad_teorica_diaria_por_centro = {
+                "120": 32,  
+                "125": 32, 
+                "126": 32, 
+                "130": 60, 
+                "135": 20,  
+                "136":0,
+                "138":0,
+                "139": 20, 
+                "140": 100, 
+                "145": 20,  
+                "150": 20, 
+                "155": 40, 
+                "160": 40, 
+                "161": 20,  
+                "162": 20, 
+                "170": 20,  
+                "172": 18,  
+                "175": 20,  
+                "176": 20,  
+                "180": 140,
+                "230": 20,
+                "250" : 20, 
+                "270": 50,
+                "280": 50, 
+                "285": 50, 
+                "290": 50,   
+                "300": 30,   
+                "350": 30,   
+                "455": 50,  
+                "400": 9999 ,
+                "450": 9999 ,
+                "500": 9999 ,
+                "999": 9999
+                }
+                for orden in ordenes:
+                    seccion_id = orden["IDSeccion"]
+                    seccion_desc = seccion_dict.get(seccion_id, "Desconocido")
+                    grupo_id = seccion_id
+                    if seccion_id in ('125', '126'):
+                        grupo_id = '125'
+                    if seccion_id in ('400', '450', '500'):
+                        grupo_id = '400'
+                        # grupo_id = (400,450,500)
+                    print(grupo_id)
+                    resumen_secciones[grupo_id]["centro"] = "-".join(map(str,grupo_id)) if isinstance(grupo_id, tuple) else seccion_id
+                    resumen_secciones[grupo_id]["seccion"] = seccion_desc
+                    resumen_secciones[grupo_id]["capacidad_teorica_diaria"] = capacidad_teorica_diaria_por_centro.get(grupo_id, 0)
+                    resumen_secciones[grupo_id]["seleccion"] = seccion_desc[:3].upper() if seccion_desc else "N/A"
+                    resumen_secciones[grupo_id]["carga_trabajo"] += orden["Tiempo"]
+                    resumen_secciones[grupo_id]["cant_trabajo"] += 1
+                total_carga_trabajo = sum(seccion["carga_trabajo"] for seccion in resumen_secciones.values())
+                for seccion_data in resumen_secciones.values():
+                    seccion_data["porcentaje_carga_trabajo"] = (seccion_data["carga_trabajo"] / total_carga_trabajo) * 100 if total_carga_trabajo > 0 else 0
+                    seccion_data["dias"] = seccion_data["carga_trabajo"] / seccion_data["capacidad_teorica_diaria"] if seccion_data["capacidad_teorica_diaria"] > 0 else 0
+                resumen_secciones_list = list(resumen_secciones.values())
+                resumen_secciones_list.sort(key=lambda x: x['seccion'],reverse=True)
+                return resumen_secciones_list
+            else:
+                return []
+                # return resumen_secciones_list
+        
+        except Exception as e:
+            print(f"Error al procesar datos: {e}")
+            return {"status": "error", "message": "Internal Server Error"}
         
 
-# @app.route('/recoding_articulo', methods=['POST'])
-# def update_articulo():
-#     data = request.json
-#     old_id_articulo = data.get('old_id_articulo')
-#     new_id_articulo = data.get('new_id_articulo')
-#     print(old_id_articulo)
-#     print(new_id_articulo)
-    
-#     if not old_id_articulo or not new_id_articulo:
-#         return jsonify({"error": "old_id_articulo and new_id_articulo are required"}), 400
-    
-#     articulo = Articulo()
-    
-#     try:
-#         articulo.disable_all_foreign_keys()
-#         articulo.update_id_articulo(old_id_articulo, new_id_articulo)
-#         articulo.enable_all_foreign_keys()
-#         return jsonify({"status": "success"}), 200
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
+    def getOFFromCentro(self,centro):
+        try:
+            self.connection = self.connection_string_solmicro.connect()
+            query  = text(f"SELECT [of].NOrden, [of].IDArticulo,ma.DescArticulo,[or].IDOperacion,[or].QFabricar,[or].QBuena,[or].CantidadTiempo, [or].IDProveedor, [of].FechaCreacion, mc.IDSeccion FROM tbOrdenRuta [or] INNER JOIN tbOrdenFabricacion [of] ON [or].IDOrden = [of].IDOrden INNER JOIN tbMaestroCentro mc ON [or].IDCentro = mc.IDCentro INNER JOIN tbMaestroArticulo ma ON [of].IDArticulo = ma.IDArticulo WHERE [or].Estado < 4 AND mc.IDSeccion = '{centro}'")
+            resultado =  self.connection.execute(query).fetchall()
+            resultado_list = []
+            for row in resultado:
+                row_dict = {
+                    "NOrden" : row[0],
+                    "IDArticulo": row[1],
+                    "DescArticulo": row[2],
+                    "IDOperacion": row[3],
+                    "QFabricar": row[4],
+                    "QBuena": row[5],
+                    "CantidadTiempo": row[6],
+                    "IDProveedor": row[7],
+                    "FechaCreacion": row[8],
+                    "IDSeccion": row[9],
+                    }
+                resultado_list.append(row_dict)
+            return resultado_list
+        
+        except Exception as e:
+            print(f"Error en getOrdenes: {e}")
+            return {"status": "error", "message": "Internal Server Error"}  
 
-# if __name__ == '__main__':
-#     app.run(debug=True, host='0.0.0.0', port=5000)
+                

@@ -69,41 +69,60 @@ def generarOF():
     try:
         data = request.json
         lista_ids = data.get('listaID')
+        # print("Lista desde el front: ", lista_ids)
         articulo_service = Articulo()
-        articulo_service.generate_of(lista_ids)
-        return jsonify({"status": "success"}), 200
-    except KeyError as e:
-        return jsonify({"status": "error", "message": str(e)}), 400
+        resultado = articulo_service.generate_of(lista_ids)
+        if resultado.get("status") == "error":
+            return jsonify(resultado), 400  # HTTP 400 para errores de procesamiento específicos
+
+        return jsonify(resultado),200
+    
     except Exception as e:
+        print(f"Error en endpoint generarOF: {e}")
         return jsonify({"status": "error", "message": "Internal Server Error"}), 500
     # print(new_id_articulo)
 
-    # if not old_id_articulo or not new_id_articulo:
-    #     return jsonify({"error": "old_id_articulo and new_id_articulo are required"}), 400
+@main_bp.route("/getOrdenes", methods=["GET"])
+def getOrdenes():
+    try:
+        articulo = Articulo()
+        result = articulo.getOrdenes()
+        return jsonify(result),200
+    except Exception as e:
+        print("Error al obtener las ordenes: " + str(e))
+        return jsonify({"estatus": "error", "message":"Error al obtener las ordenes"}),500
 
-    # articulo = Articulo()
+@main_bp.route("/getSeccion", methods=["GET"])
+def getSeccion():
+    try:
+        articulo = Articulo()
+        resultado = articulo.getSeccion()
+        return jsonify(resultado)
+    except Exception as e:
+        print("Error al obtener las ordenes: " + str(e))
+        return jsonify({"estatus": "error", "message":"Error al obtener las ordenes"}),500
     
-    # try:
-    #     articulo.disable_all_foreign_keys()
-    #     articulo.update_id_articulo(old_id_articulo, new_id_articulo)
-    #     articulo.enable_all_foreign_keys()
-    #     return jsonify({"status": "success"}), 200
-    # except Exception as e:
-    #     return jsonify({"error": str(e)}), 500
-
-# @main_bp.route('/execute_sql', methods=['POST'])
-# def execute_sql():
-#     data = request.json
-#     script_id = data.get('script_id')
-#     params = data.get('params', {})
-
-#     if not script_id:
-#         return jsonify({"error": "script_id is required"}), 400
-
-#     sql_service = SQLService()
+@main_bp.route("/getCapacidadTD", methods=["POST"])
+def getCapacidadTD():
+    try:
+        data = request.json
+        start_date = data.get('startDate')
+        end_date = data.get('endDate')
+        articulo = Articulo()
+        resultado = articulo.procesarCapacidadTeorica(start_date,end_date)
+        return jsonify(resultado)
+    except Exception as e:
+        print("Error al procesar ordenes: " + str(e))
+        return jsonify({"estatus": "error", "message":"Error al obtener las ordenes"}),500
     
-#     try:
-#         result = sql_service.execute_script(script_id, params)
-#         return jsonify({"status": "success", "result": result}), 200
-#     except Exception as e:
-#         return jsonify({"error": str(e)}), 500
+@main_bp.route("/getOFFromCentro", methods=["POST"])
+def getOFFromCentro():
+    try:
+        data = request.json
+        centro = data.get("centro")
+        articulo= Articulo()
+        resultado = articulo.getOFFromCentro(centro)
+        return jsonify(resultado)
+    except Exception as e:
+        print("Error al obtener las ordenes: " + str(e))
+        return jsonify({"estatus": "error", "message":"Error al obtener las ordenes"}),500

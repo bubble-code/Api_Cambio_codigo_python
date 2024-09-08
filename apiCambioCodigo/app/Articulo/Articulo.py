@@ -21,7 +21,7 @@ class Articulo:
         self.password_solmicro = 'Altai2021'
         self.password_industry = '71zl6p9h'
         self.connection_string_solmicro = create_engine(f'mssql+pyodbc://{self.usernameDB}:{self.password_solmicro}@{self.server_solmicro}/{self.database_solmicro}?driver=SQL+Server')
-        self.connection_string_Industry = f'mssql+pyodbc://{self.usernameDB}:{self.password_industry}@{self.server_industry}/{self.database_industry}?driver=SQL+Server'
+        self.connection_string_Industry = (f"DRIVER={{SQL Server}};"f"SERVER={self.server_industry};"f"DATABASE={self.database_industry};"f"UID={self.usernameDB};"f"PWD={self.password_industry};") 
         self.connection = None
         self.connection_industry = None
         self.old_id_articulo = None
@@ -415,10 +415,10 @@ VALUES ({auto_num_id_ruta}, {item["IDRutaOp"]}, {self.tb_auto_nu_orden}, N'{n_or
         if not self._articulo_existe(id_articulo):
             # return {"status": "error", "message": "S/O"}
             return  "S/A"
-        for row in rows:
-            result = self._check_ruta(id_articulo,row)
-            if not result:
-                return "S/F"
+        # for row in rows:
+        #     result = self._check_ruta(id_articulo,row)
+        #     if not result:
+        #         return "S/F"
 
         contador_of, n_orden = self._obtener_contador()
         revision = self._obtener_revision(id_articulo)
@@ -442,11 +442,12 @@ VALUES ({auto_num_id_ruta}, {item["IDRutaOp"]}, {self.tb_auto_nu_orden}, N'{n_or
     def generate_of(self,):
         try:
             self.connection = self.connection_string_solmicro.connect()
-            listIDs = self.get_TFarbfase_industry()
-            print(listIDs)
+            listaArticulo = self.get_TFarbfase_industry()
             self._modificar_sp()
-            # for lanzamiento, rows in listaArticulo.items():
-            #     resultado = self._process_lanzamiento(rows)
+            for lanzamiento, rows in listaArticulo.items():
+                print(lanzamiento)
+                print(rows)
+                resultado = self._process_lanzamiento(rows)
                 # if not resultado.get('status')== 'error':
                 #     return resultado.get("message")
                 # # Si ocurre un error, puedes hacer rollback aquí si es necesario

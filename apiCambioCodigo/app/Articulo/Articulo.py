@@ -15,13 +15,12 @@ class Articulo:
         self.server_solmicro = r'srvsql'
         self.server_industry = r'SERVIDOR'
         # self.database_solmicro = 'SolmicroERP6_Favram_Pruebas'
-        self.database_solmicro = 'SolmicroERP6_Favram'
-        self.database_industry = 'IPFavram'
-        self.usernameDB = 'sa'
-        self.password_solmicro = 'Altai2021'
-        self.password_industry = '71zl6p9h'
-        self.connection_string_solmicro = create_engine(f'mssql+pyodbc://{self.usernameDB}:{self.password_solmicro}@{self.server_solmicro}/{self.database_solmicro}?driver=SQL+Server')
-        self.connection_string_Industry = (f"DRIVER={{SQL Server}};"f"SERVER={self.server_industry};"f"DATABASE={self.database_industry};"f"UID={self.usernameDB};"f"PWD={self.password_industry};") 
+        self.server_industry = os.environ["server_industry"]
+        self.database_solmicro = os.environ["database_solmicro"]
+        self.username_solmicro = os.environ["username_solmicro"]
+        self.password_solmicro = os.environ["password_solmicro"]
+        self.connection_string_solmicro = create_engine(
+            f'mssql+pyodbc://{self.username_solmicro}:{self.password_solmicro}@{self.server_solmicro}/{self.database_solmicro}?driver=SQL+Server')
         self.connection = None
         self.connection_industry = None
         self.old_id_articulo = None
@@ -387,14 +386,14 @@ class Articulo:
     def _insertar_orden_estructura(self, n_orden, item, q_fabrica, q_buenas):
         auto_num_id_estructura = self._get_value_autonumerico()
         query = text(f"""INSERT INTO tbOrdenEstructura (IDOrdenEstructura, IDOrden, IDComponente, NOrden, Cantidad, Merma, Secuencia, QNecesaria, QConsumida, IDAlmacen, IDEstrComp, IDUdMedidaProduccion, Factor, CantidadProduccion, RamaExplosionOF, FechaCreacionAudi, FechaModificacionAudi, UsuarioAudi, UsuarioCreacionAudi)
-                        VALUES ({auto_num_id_estructura}, {self.tb_auto_nu_orden}, N'{item["IDComponente"]}', N'{n_orden}', {item["Cantidad"]}, {float(item["Merma"])}, {int(item["Secuencia"])}, {float(item["Cantidad"]) * float(q_fabrica)}, {float(q_buenas) * float(item["Cantidad"])}, N'0', {item["IDEstrComp"]}, N'{item["IDUdMedidaProduccion"]}', {item["Factor"]}, {item["CantidadProduccion"]}, N'{self.tb_auto_nu_orden}\\{auto_num_id_estructura}', '20240810 14:03:13.294', '20240810 14:03:13.294', N'favram\\a.obregon', N'favram\\a.obregon')""")
+                        VALUES ({auto_num_id_estructura}, {self.tb_auto_nu_orden}, N'{item["IDComponente"]}', N'{n_orden}', {item["Cantidad"]}, {item["Merma"]}, {item["Secuencia"]}, {item["Cantidad"] * q_fabrica}, {q_buenas * item["Cantidad"]}, N'0', {item["IDEstrComp"]}, N'{item["IDUdMedidaProduccion"]}', {item["Factor"]}, {item["CantidadProduccion"]}, N'{self.tb_auto_nu_orden}\\{auto_num_id_estructura}', '20240810 14:03:13.294', '20240810 14:03:13.294', N'favram\\a.obregon', N'favram\\a.obregon')""")
         self.connection.execute(query)
         self.connection.commit()
 
     def _check_ruta(self,id_articulo,row):
-        query = text(f"SELECT count(*) as count FROM tbRuta r WHERE r.IDArticulo = N'{id_articulo}' AND r.IDRuta = N'01' and r.Secuencia = {int(row[2])}")                
-        result = self.connection.execute(query).fetchall()
-        return result[0] is not None
+        query = text(f"SELECT count(*) as count FROM tbRuta r WHERE r.IDArticulo = N'{id_articulo}' AND r.IDRuta = N'01' and r.Secuencia = {row[2]}")                
+        result = self.connection.execute(query).fetchone()
+        return result[0] > 0
 
     def _procesar_ruta(self, id_articulo, n_orden, rows):
         for row in rows:

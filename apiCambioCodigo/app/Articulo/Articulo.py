@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify
+import pyodbc, struct
 from sqlalchemy import create_engine, text
 from flask_cors import CORS
 import json
 from typing import List, Dict, Any
 from collections import defaultdict
 from datetime import datetime
-import os
 
 # app = Flask(__name__)
 # CORS(app)
@@ -13,17 +13,21 @@ import os
 class Articulo:
     def __init__(self):
         self.server_solmicro = r'srvsql'
+        self.server_industry = r'SERVIDOR'
         # self.database_solmicro = 'SolmicroERP6_Favram_Pruebas'
-        self.server_industry = os.environ["server_industry"]
-        self.database_solmicro = os.environ["database_solmicro"]
-        self.username_solmicro = os.environ["username_solmicro"]
-        self.password_solmicro = os.environ["password_solmicro"]
-        self.connection_string_solmicro = create_engine(
-            f'mssql+pyodbc://{self.username_solmicro}:{self.password_solmicro}@{self.server_solmicro}/{self.database_solmicro}?driver=SQL+Server')
+        self.database_solmicro = 'SolmicroERP6_Favram'
+        self.database_industry = 'IPFavram'
+        self.usernameDB = 'sa'
+        self.password_solmicro = 'Altai2021'
+        self.password_industry = '71zl6p9h'
+        self.connection_string_solmicro = create_engine(f'mssql+pyodbc://{self.usernameDB}:{self.password_solmicro}@{self.server_solmicro}/{self.database_solmicro}?driver=SQL+Server')
+        self.connection_string_Industry = f'mssql+pyodbc://{self.usernameDB}:{self.password_industry}@{self.server_industry}/{self.database_industry}?driver=SQL+Server'
         self.connection = None
+        self.connection_industry = None
         self.old_id_articulo = None
         self.foreign_keys = None
         self.tb_auto_nu_orden = None
+        self.query_tfarbfase_industry = f'select Lanzamiento,Articulo,Fase,Descripcion,CantidadFabricar,CantidadFabricada,FechaInicioFabricacion,FechaPrevistaFinal,MaquinaAsignada,Centro,NULL as Resultado from TFabrfase where CantidadFabricar<> CantidadFabricada ORDER BY Lanzamiento ASC'
 
     def Open_Conn_Solmicro(self):
         try:
@@ -31,6 +35,27 @@ class Articulo:
             return self.connection
         except Exception as e:
             print("Error opening connection: ", e)
+    
+    def get_conn_insdutry(self):
+        conn = pyodbc.connect(self.connection_string_Industry)
+        return conn   
+    
+    def get_TFarbfase_industry(self):
+        Listrows_group = {} 
+        with self.get_conn_insdutry() as conn:
+            cursor = conn.cursor()
+            cursor.execute(self.query_tfarbfase_industry)
+            for row in cursor.fetchall():
+                lanzamiento = row.Lanzamiento
+                idArticulo = row.Articulo
+                if lanzamiento not in Listrows_group:
+                    Listrows_group[lanzamiento] = {}
+                if idArticulo not in Listrows_group[lanzamiento]:
+                    Listrows_group[lanzamiento][idArticulo] = []
+                Listrows_group[lanzamiento][idArticulo].append(row)
+        return Listrows_group
+
+
 
     def close_conn(self):
         if self.connection:
@@ -414,12 +439,14 @@ VALUES ({auto_num_id_ruta}, {item["IDRutaOp"]}, {self.tb_auto_nu_orden}, N'{n_or
         result = self.connection.execute(query_check_articulo).fetchone()
         return result[0] > 0
 
-    def generate_of(self,listaArticulo):
+    def generate_of(self,):
         try:
             self.connection = self.connection_string_solmicro.connect()
+            listIDs = self.get_TFarbfase_industry()
+            print(listIDs)
             self._modificar_sp()
-            for lanzamiento, rows in listaArticulo.items():
-                resultado = self._process_lanzamiento(rows)
+            # for lanzamiento, rows in listaArticulo.items():
+            #     resultado = self._process_lanzamiento(rows)
                 # if not resultado.get('status')== 'error':
                 #     return resultado.get("message")
                 # # Si ocurre un error, puedes hacer rollback aquí si es necesario
@@ -429,7 +456,7 @@ VALUES ({auto_num_id_ruta}, {item["IDRutaOp"]}, {self.tb_auto_nu_orden}, N'{n_or
                 #     "message": f"Error processing batch {lanzamiento}: {resultado.get('message')}"
                 #     }
             self._restaurar_sp()
-            return {"status": "success", "message": f"{resultado}"}
+            return {"status": "success", "message": f"{"resultado"}"}
         except Exception as e:
             print(f"Error en generate_of: {e}")
             self.connection.rollback()

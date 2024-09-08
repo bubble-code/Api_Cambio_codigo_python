@@ -64,14 +64,15 @@ def obtener_articulos():
         print("Error obteniendo artículos: ", e)
         return jsonify([]), 500
 
-@main_bp.route('/generarOF', methods=['POST'])
+@main_bp.route('/generarOF', methods=['GET'])
 def generarOF():
     try:
-        data = request.json
-        lista_ids = data.get('listaID')
+        # data = request.json
+        # lista_ids = data.get('listaID')
         # print("Lista desde el front: ", lista_ids)
         articulo_service = Articulo()
-        resultado = articulo_service.generate_of(lista_ids)
+        # resultado = articulo_service.generate_of(lista_ids)
+        resultado = articulo_service.generate_of()
         if resultado.get("status") == "error":
             return jsonify(resultado), 400  # HTTP 400 para errores de procesamiento específicos
 
